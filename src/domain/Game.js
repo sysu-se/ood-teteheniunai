@@ -162,15 +162,7 @@ export class Game {
   }
 
   canEnterExplore() {
-    if (this.isExploring()) {
-      return false;
-    }
-
-    if (this.present.isSolved()) {
-      return false;
-    }
-
-    return this.present.getNextDeterministicMove() === null;
+    return !this.isExploring();
   }
 
   startExplore() {
@@ -178,13 +170,6 @@ export class Game {
       return {
         started: false,
         reason: 'already-exploring',
-      };
-    }
-
-    if (!this.canEnterExplore()) {
-      return {
-        started: false,
-        reason: 'deterministic-hint-available',
       };
     }
 

@@ -53,12 +53,13 @@ describe('HW2 hint and explore mode', () => {
     expect(game.getSudoku().getGrid()[0][2]).toBe(4)
   })
 
-  it('allows entering explore mode only when no deterministic move is available', async () => {
+  it('allows entering explore mode from any unsolved board state', async () => {
     const { createGame, createSudoku } = await loadDomainApi()
 
     const gameWithSingle = createGame({ sudoku: createSudoku(makeAlmostSolvedPuzzle()) })
-    expect(gameWithSingle.canEnterExplore()).toBe(false)
-    expect(gameWithSingle.startExplore().started).toBe(false)
+    expect(gameWithSingle.canEnterExplore()).toBe(true)
+    expect(gameWithSingle.startExplore()).toEqual({ started: true, knownFailed: false })
+    expect(gameWithSingle.getMode()).toBe('explore')
 
     const gameWithoutSingle = createGame({ sudoku: createSudoku(makeNoSinglePuzzle()) })
     expect(gameWithoutSingle.canEnterExplore()).toBe(true)

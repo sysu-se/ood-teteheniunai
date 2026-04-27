@@ -12,6 +12,16 @@
 
 	let canUndo = false;
 	let canRedo = false;
+	let canEnterExplore = false;
+	let exploreMode = 'main';
+	let exploreMessage = '';
+	let exploreStatus = {
+		active: false,
+		failed: false,
+		contradiction: false,
+		knownFailed: false,
+		fingerprint: null,
+	};
 
 	$: hintsAvailable = $hints > 0;
 	$: cursorSelected = Number.isInteger($cursor.x) && Number.isInteger($cursor.y);
@@ -22,6 +32,15 @@
 		if (gameStore) {
 			canUndo = gameStore.canUndo();
 			canRedo = gameStore.canRedo();
+			if (typeof gameStore.canEnterExplore === 'function') {
+				canEnterExplore = gameStore.canEnterExplore();
+			}
+			if (typeof gameStore.getMode === 'function') {
+				exploreMode = gameStore.getMode();
+			}
+			if (typeof gameStore.getExploreStatus === 'function') {
+				exploreStatus = gameStore.getExploreStatus();
+			}
 		}
 	}
 
@@ -71,6 +90,56 @@
 			canRedo = gameStore.canRedo();
 		}
 	}
+
+	function handleStartExplore() {
+		if (!gameStore || typeof gameStore.startExplore !== 'function') {
+			return;
+		}
+
+		const result = gameStore.startExplore();
+		if (result && result.started) {
+			exploreMessage = '已进入探索模式';
+			return;
+		}
+
+		if (result && result.reason === 'deterministic-hint-available') {
+			exploreMessage = '仍有可直接确定的格子，暂不能进入探索';
+		} else {
+			exploreMessage = '进入探索模式失败';
+		}
+	}
+
+	function handleRollbackExplore() {
+		if (!gameStore || typeof gameStore.rollbackExplore !== 'function') {
+			return;
+		}
+
+		if (gameStore.rollbackExplore()) {
+			exploreMessage = '已回溯到探索起点';
+		}
+	}
+
+	function handleCommitExplore() {
+		if (!gameStore || typeof gameStore.commitExplore !== 'function') {
+			return;
+		}
+
+		if (gameStore.commitExplore()) {
+			exploreMessage = '已提交探索结果';
+		} else {
+			exploreMessage = '探索无变更，未提交';
+		}
+	}
+
+	function handleDiscardExplore() {
+		if (!gameStore || typeof gameStore.discardExplore !== 'function') {
+			return;
+		}
+
+		if (gameStore.discardExplore()) {
+			exploreMessage = '已放弃探索并返回主局面';
+		}
+	}
 </script>
 
 <div class="action-buttons space-x-3">
@@ -115,7 +184,39 @@
 		<span class="badge tracking-tighter" class:badge-primary={$notes}>{$notes ? 'ON' : 'OFF'}</span>
 	</button>
 
+	<button class="btn btn-round" disabled={$gamePaused || !gameStore || exploreMode === 'explore'} on:click={handleStartExplore} title="进入探索模式">
+		E
+	</button>
+
+	<button class="btn btn-round" disabled={$gamePaused || !gameStore || exploreMode !== 'explore'} on:click={handleRollbackExplore} title="回溯到探索起点">
+		R
+	</button>
+
+	<button class="btn btn-round" disabled={$gamePaused || !gameStore || exploreMode !== 'explore'} on:click={handleCommitExplore} title="提交探索结果">
+		C
+	</button>
+
+	<button class="btn btn-round" disabled={$gamePaused || !gameStore || exploreMode !== 'explore'} on:click={handleDiscardExplore} title="放弃探索结果">
+		X
+	</button>
+
 </div>
+
+{#if exploreMode === 'explore'}
+	<div class="explore-status" class:explore-failed={exploreStatus.failed}>
+		{#if exploreStatus.knownFailed}
+			已命中历史失败路径，请回溯后换候选值。
+		{:else if exploreStatus.contradiction}
+			检测到冲突，当前探索失败，请回溯后继续。
+		{:else}
+			探索模式进行中。
+		{/if}
+	</div>
+{/if}
+
+{#if exploreMessage}
+	<div class="explore-message">{exploreMessage}</div>
+{/if}
 
 
 <style>
@@ -135,5 +236,17 @@
 
 	.badge-primary {
 		@apply bg-primary;
+	}
+
+	.explore-status {
+		@apply mt-2 px-3 py-2 text-sm rounded bg-blue-100 text-blue-800;
+	}
+
+	.explore-failed {
+		@apply bg-red-100 text-red-800;
+	}
+
+	.explore-message {
+		@apply mt-2 px-3 py-1 text-xs rounded bg-gray-100 text-gray-700;
 	}
 </style>
