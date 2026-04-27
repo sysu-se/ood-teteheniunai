@@ -14,6 +14,8 @@
 	let canRedo = false;
 
 	$: hintsAvailable = $hints > 0;
+	$: cursorSelected = Number.isInteger($cursor.x) && Number.isInteger($cursor.y);
+	$: selectedCellEmpty = cursorSelected && $userGrid[$cursor.y][$cursor.x] === 0;
 
 	$: {
 		$userGrid;
@@ -23,14 +25,33 @@
 		}
 	}
 
-	function handleHint() {
+	function handleHintAnswer() {
 		if (hintsAvailable) {
+			if (gameStore && typeof gameStore.applyHintAnswer === 'function') {
+				gameStore.applyHintAnswer();
+			} else if (gameStore && typeof gameStore.applyHint === 'function') {
+				gameStore.applyHint();
+			}
+		}
+	}
+
+	function handleHintCandidates() {
+		if (!hintsAvailable || !selectedCellEmpty) {
+			return;
+		}
+
+		if (gameStore && typeof gameStore.applyHintCandidates === 'function') {
+			const hintedCandidates = gameStore.applyHintCandidates({ x: $cursor.x, y: $cursor.y });
+			if (!Array.isArray(hintedCandidates) || hintedCandidates.length === 0) {
+				return;
+			}
+
 			if ($candidates.hasOwnProperty($cursor.x + ',' + $cursor.y)) {
 				candidates.clear($cursor);
 			}
 
-			if (gameStore && typeof gameStore.applyHint === 'function') {
-				gameStore.applyHint({ x: $cursor.x, y: $cursor.y });
+			for (const value of hintedCandidates) {
+				candidates.add($cursor, value);
 			}
 		}
 	}
@@ -66,9 +87,19 @@
 		</svg>
 	</button>
 
-	<button class="btn btn-round btn-badge" disabled={$keyboardDisabled || !hintsAvailable || $userGrid[$cursor.y][$cursor.x] !== 0} on:click={handleHint} title="Hints ({$hints})">
+	<button class="btn btn-round btn-badge" disabled={$keyboardDisabled || !hintsAvailable} on:click={handleHintAnswer} title="直接答案提示 ({$hints})">
 		<svg class="icon-outline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 			<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+		</svg>
+
+		{#if $settings.hintsLimited}
+			<span class="badge" class:badge-primary={hintsAvailable}>{$hints}</span>
+		{/if}
+	</button>
+
+	<button class="btn btn-round btn-badge" disabled={$keyboardDisabled || !hintsAvailable || !selectedCellEmpty} on:click={handleHintCandidates} title="候选数提示 ({$hints})">
+		<svg class="icon-outline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+			<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
 		</svg>
 
 		{#if $settings.hintsLimited}

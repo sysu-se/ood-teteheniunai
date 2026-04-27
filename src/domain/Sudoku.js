@@ -5,6 +5,10 @@ function cloneGrid(grid) {
   return grid.map(row => row.slice());
 }
 
+function cloneGivens(givens) {
+  return givens.map(row => row.slice());
+}
+
 function normalizeCellValue(value) {
   if (value === null || value === 0) {
     return 0;
@@ -43,6 +47,25 @@ function validateGrid(initialGrid) {
   });
 }
 
+function validateGivens(givens) {
+  if (!Array.isArray(givens) || givens.length !== SIZE) {
+    throw new TypeError('Sudoku givens must be a 9x9 boolean array');
+  }
+
+  return givens.map((row, rowIndex) => {
+    if (!Array.isArray(row) || row.length !== SIZE) {
+      throw new TypeError('Sudoku givens must be a 9x9 boolean array');
+    }
+
+    return row.map((cell, colIndex) => {
+      if (typeof cell !== 'boolean') {
+        throw new TypeError(`Invalid givens value at row ${rowIndex}, col ${colIndex}`);
+      }
+      return cell;
+    });
+  });
+}
+
 function createEmptyConflicts() {
   return new Map();
 }
@@ -65,10 +88,14 @@ function markConflict(conflicts, row, col, value, reasons) {
 }
 
 export class Sudoku {
-  constructor(initialGrid) {
+  constructor(initialGrid, options = {}) {
     const normalizedGrid = validateGrid(initialGrid);
+    const givens = options.givens
+      ? validateGivens(options.givens)
+      : normalizedGrid.map(row => row.map(cell => cell !== 0));
+
     this.grid = cloneGrid(normalizedGrid);
-    this.givens = normalizedGrid.map(row => row.map(cell => cell !== 0));
+    this.givens = cloneGivens(givens);
   }
 
   getGrid() {
@@ -97,12 +124,113 @@ export class Sudoku {
   }
 
   clone() {
-    return new Sudoku(this.grid);
+    return new Sudoku(this.grid, { givens: this.givens });
+  }
+
+  getCandidates(row, col) {
+    validateIndex(row, 'row');
+    validateIndex(col, 'col');
+
+    if (this.grid[row][col] !== 0) {
+      return [];
+    }
+
+    const usedValues = new Set();
+
+    for (let i = 0; i < SIZE; i++) {
+      const rowValue = this.grid[row][i];
+      const colValue = this.grid[i][col];
+      if (rowValue !== 0) {
+        usedValues.add(rowValue);
+      }
+      if (colValue !== 0) {
+        usedValues.add(colValue);
+      }
+    }
+
+    const boxStartRow = Math.floor(row / BOX_SIZE) * BOX_SIZE;
+    const boxStartCol = Math.floor(col / BOX_SIZE) * BOX_SIZE;
+    for (let rowOffset = 0; rowOffset < BOX_SIZE; rowOffset++) {
+      for (let colOffset = 0; colOffset < BOX_SIZE; colOffset++) {
+        const boxValue = this.grid[boxStartRow + rowOffset][boxStartCol + colOffset];
+        if (boxValue !== 0) {
+          usedValues.add(boxValue);
+        }
+      }
+    }
+
+    const candidates = [];
+    for (let value = 1; value <= SIZE; value++) {
+      if (!usedValues.has(value)) {
+        candidates.push(value);
+      }
+    }
+
+    return candidates;
+  }
+
+  getAllCandidates() {
+    const all = [];
+    for (let row = 0; row < SIZE; row++) {
+      for (let col = 0; col < SIZE; col++) {
+        if (this.grid[row][col] !== 0) {
+          continue;
+        }
+
+        all.push({
+          row,
+          col,
+          candidates: this.getCandidates(row, col),
+        });
+      }
+    }
+
+    return all;
+  }
+
+  getDeterministicMoves() {
+    return this.getAllCandidates()
+      .filter(cell => cell.candidates.length === 1)
+      .map(cell => ({
+        row: cell.row,
+        col: cell.col,
+        value: cell.candidates[0],
+      }));
+  }
+
+  getNextDeterministicMove() {
+    const singles = this.getDeterministicMoves();
+    return singles.length > 0 ? singles[0] : null;
+  }
+
+  hasContradiction() {
+    if (this.checkConflicts().length > 0) {
+      return true;
+    }
+
+    for (let row = 0; row < SIZE; row++) {
+      for (let col = 0; col < SIZE; col++) {
+        if (this.grid[row][col] !== 0) {
+          continue;
+        }
+
+        if (this.getCandidates(row, col).length === 0) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  getStateFingerprint() {
+    return this.grid.map(row => row.join('')).join('|');
   }
 
   toJSON() {
     return {
-      grid: this.getGrid()
+      grid: this.getGrid(),
+      givens: cloneGivens(this.givens),
     };
   }
 
@@ -111,14 +239,16 @@ export class Sudoku {
     if (!obj || typeof obj !== 'object' || !('grid' in obj)) {
       throw new TypeError('Invalid Sudoku JSON payload');
     }
-    return new Sudoku(obj.grid);
+
+    return new Sudoku(obj.grid, {
+      givens: 'givens' in obj ? obj.givens : undefined,
+    });
   }
 
   toString() {
     return this.grid.map(r => r.map(c => c === 0 ? '.' : c).join(' ')).join('\n');
   }
 
-  // 判断是否已完成且无冲突
   isSolved() {
     for (let i = 0; i < SIZE; i++) {
       const rowSet = new Set();
@@ -132,6 +262,7 @@ export class Sudoku {
         colSet.add(colVal);
       }
     }
+
     for (let boxRow = 0; boxRow < BOX_SIZE; boxRow++) {
       for (let boxCol = 0; boxCol < BOX_SIZE; boxCol++) {
         const boxSet = new Set();
@@ -144,6 +275,7 @@ export class Sudoku {
         }
       }
     }
+
     return true;
   }
 
