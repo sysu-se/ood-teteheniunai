@@ -28,9 +28,9 @@
 	function handleHintAnswer() {
 		if (hintsAvailable) {
 			if (gameStore && typeof gameStore.applyHintAnswer === 'function') {
-				gameStore.applyHintAnswer();
+				gameStore.applyHintAnswer({ x: $cursor.x, y: $cursor.y });
 			} else if (gameStore && typeof gameStore.applyHint === 'function') {
-				gameStore.applyHint();
+				gameStore.applyHint({ x: $cursor.x, y: $cursor.y });
 			}
 		}
 	}
